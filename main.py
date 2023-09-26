@@ -1,10 +1,16 @@
 # Import the needed credential and management objects from the libraries.
-import os
-import dotenv
+import os, random, dotenv
+
 from azure.identity import AzureCliCredential
 from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.storage import StorageManagementClient
+from azure.mgmt.storage.v2023_01_01.models import StorageAccountCreateParameters, NetworkRuleSet, Bypass, VirtualNetworkRule, IPRule
 
 dotenv.load_dotenv()
+RG_NAME = "hello-pysdk-rg"
+LOCNAME = "centralus"
+
+SA_NAME = "hellopysdksa"
 
 # Acquire a credential object using CLI-based authentication.
 credential = AzureCliCredential()
@@ -17,35 +23,18 @@ resource_client = ResourceManagementClient(credential, subscription_id)
 
 # Provision the resource group.
 rg_result = resource_client.resource_groups.create_or_update(
-    "PythonAzureExample-rg", {"location": "centralus"}
+    f"{RG_NAME}", {"location": f"{LOCNAME}"}
 )
-
-# Within the ResourceManagementClient is an object named resource_groups,
-# which is of class ResourceGroupsOperations, which contains methods like
-# create_or_update.
-#
-# The second parameter to create_or_update here is technically a ResourceGroup
-# object. You can create the object directly using ResourceGroup(location=
-# LOCATION) or you can express the object as inline JSON as shown here. For
-# details, see Inline JSON pattern for object arguments at
-# https://learn.microsoft.com/azure/developer/python/sdk
-# /azure-sdk-library-usage-patterns#inline-json-pattern-for-object-arguments
 
 print(
     f"Provisioned resource group {rg_result.name} in \
         the {rg_result.location} region"
 )
 
-# The return value is another ResourceGroup object with all the details of the
-# new group. In this case the call is synchronous: the resource group has been
-# provisioned by the time the call returns.
-
-# To update the resource group, repeat the call with different properties, such
-# as tags:
 rg_result = resource_client.resource_groups.create_or_update(
-    "PythonAzureExample-rg",
+    f"{RG_NAME}",
     {
-        "location": "centralus",
+        "location": f"{LOCNAME}",
         "tags": {"environment": "test", "department": "tech"},
     },
 )
@@ -56,3 +45,61 @@ print(f"Updated resource group {rg_result.name} with tags")
 # poller = resource_client.resource_groups.begin_delete(rg_result.name)
 # result = poller.result()
 
+# Creating the Storage Account
+
+storage_client = StorageManagementClient(credential, subscription_id)
+
+## Configuring network rules
+network_rule_set = NetworkRuleSet()
+
+## Add a VirtualNetworkRule to the NetworkRuleSet object
+virtual_network_rule = VirtualNetworkRule()
+virtual_network_rule.virtual_network_resource_id = ""
+network_rule_set.virtual_network_rules.append(virtual_network_rule)
+
+#STORAGE_ACCOUNT_NAME = f"pythonazurestorage{random.randint(1,100000):05}"
+STORAGE_ACCOUNT_NAME = f"{SA_NAME}{random.randint(1,100000):05}"
+
+# Check if the account name is available. Storage account names must be unique across
+# Azure because they're used in URLs.
+availability_result = storage_client.storage_accounts.check_name_availability(
+    { "name": STORAGE_ACCOUNT_NAME }
+)
+
+if not availability_result.name_available:
+    print(f"Storage name {STORAGE_ACCOUNT_NAME} is already in use. Try another name.")
+    exit()
+
+# The name is available, so provision the account
+poller = storage_client.storage_accounts.begin_create(RG_NAME, STORAGE_ACCOUNT_NAME,
+    {
+        "location" : LOCNAME,
+        "kind": "StorageV2",
+        "sku": {"name": "Standard_LRS"},
+        "is_hns_enabled":True
+    }
+)
+
+# Long-running operations return a poller object; calling poller.result()
+# waits for completion.
+account_result = poller.result()
+print(f"Provisioned storage account {account_result.name}")
+
+
+# Step 3: Retrieve the account's primary access key and generate a connection string.
+keys = storage_client.storage_accounts.list_keys(RG_NAME, STORAGE_ACCOUNT_NAME)
+
+print(f"Primary key for storage account: {keys.keys[0].value}")
+
+conn_string = f"DefaultEndpointsProtocol=https;EndpointSuffix=core.windows.net;AccountName={STORAGE_ACCOUNT_NAME};AccountKey={keys.keys[0].value}"
+
+print(f"Connection string: {conn_string}")
+
+# Step 4: Provision the blob container in the account (this call is synchronous)
+CONTAINER_NAME = "hello-container"
+container = storage_client.blob_containers.create(RG_NAME, STORAGE_ACCOUNT_NAME, CONTAINER_NAME, {})
+
+# The fourth argument is a required BlobContainer object, but because we don't need any
+# special values there, so we just pass empty JSON.
+
+print(f"Provisioned blob container {container.name}")
