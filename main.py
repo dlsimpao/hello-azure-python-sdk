@@ -50,12 +50,12 @@ print(f"Updated resource group {rg_result.name} with tags")
 storage_client = StorageManagementClient(credential, subscription_id)
 
 ## Configuring network rules
-network_rule_set = NetworkRuleSet()
+# network_rule_set = NetworkRuleSet()
 
-## Add a VirtualNetworkRule to the NetworkRuleSet object
-virtual_network_rule = VirtualNetworkRule()
-virtual_network_rule.virtual_network_resource_id = ""
-network_rule_set.virtual_network_rules.append(virtual_network_rule)
+# ## Add a VirtualNetworkRule to the NetworkRuleSet object
+# virtual_network_rule = VirtualNetworkRule()
+# virtual_network_rule.virtual_network_resource_id = ""
+# network_rule_set.virtual_network_rules.append(virtual_network_rule)
 
 #STORAGE_ACCOUNT_NAME = f"pythonazurestorage{random.randint(1,100000):05}"
 STORAGE_ACCOUNT_NAME = f"{SA_NAME}{random.randint(1,100000):05}"
